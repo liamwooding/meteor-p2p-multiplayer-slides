@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+    <title>Meteor P2P Multiplayer</title>
+    <link rel="stylesheet" type="text/css" href="build/build.css">
+  </head>
+  <style>
+    .bg-wow {
+      background: linear-gradient( rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.5) ), url('images/wow-screenshot-lion.jpg');
+      background-size: 100% 100%;
+    }
+    .bg-chess {
+      background: linear-gradient( rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.5) ), url('images/pure-chess.png');
+      background-size: 100% 100%;
+    }
+    .background-white {
+      background-color: white;
+    }
+    
+  </style>
+  <body>
+    <article>
+      <section data-bespoke-backdrop="emphatic" class="emphatic-text">
+        <h1>Peer-to-peer Multiplayer in Meteor</h1>
+      </section>
+      <section>
+        <h2>Videogames!</h2>
+        <h3>What does multiplayer mean?</h3>
+        <ul>
+          <li>Clients can view & interact with a shared simulation</li>
+          <li>Players may be competing, cooperating, or just messing about</li>
+          <li>Interactions must be within the rules of the game - circumventing these rules is cheating</li>
+        </ul>
+      </section>
+      <section data-bespoke-backdrop="bg-wow">
+        <h2>Many Worlds</h2>
+        <ul>
+          <li>Servers can only support so many players at once</li>
+          <li>Players are usually split between different servers</li>
+          <li>Players are interacting with an <i>instance</i> of a world</li>
+        </ul>
+      </section>
+      <section>
+        <h2>Moving Out</h2>
+        <h3>Taking things off the server</h3>
+        <ul>
+          <li>Move each instance of the world onto one or more of the client machines</li>
+          <li>Use a lightweight server to coordinate clients</li>
+        </ul>
+      </section>
+      <section data-bespoke-backdrop="bg-chess">
+        <h2>Deterministic Lockstep</h2>
+        <h3>The board game approach</h3>
+        <ul>
+          <li>Game logic must be completely deterministic</li>
+          <li>On every step, all players advance their simulations and announce their moves</li>
+          <li>Works great over LAN</li>
+          <li>Works terribly if any player suffers lag</li>
+        </ul>
+      </section>
+      <section data-bespoke-backdrop="emphatic" class="emphatic-text">
+        <h2>Aims & Assumptions</h2>
+        <ol>
+          <li>We want physics of some kind</li>
+          <li>Devices will be of variable power</li>
+          <li>The game should <i>feel</i> low-latency</li>
+          <li>Players will drop in & out without warning</li>
+        </ol>
+      </section>
+      <section data-bespoke-backdrop="emphatic" class="emphatic-text">
+        <h2>Aims & Assumptions</h2>
+        <ol>
+          <li>Not every device supports WebRTC yet</li>
+          <li>Server-hosted games worked pretty well 10 years ago</li>
+          <li>Client-hosted games will have roughly twice the latency</li>
+          <li>The average person's connection is roughly twice as fast as it was 10 years ago</li>
+        </ol>
+      </section>
+      <section>
+        <h2>Client/Host</h2>
+        <h3>The simple approach</h3>
+        <ul>
+          <li>Host runs the simulation</li>
+          <li>Clients subscribe to snapshots and send inputs to the host</li>
+          <li>On each screen refresh, client renders the most recent snapshot</li>
+        </ul>
+      </section>
+      <section>
+        <h2>Client/Host</h2>
+        <h3>How it works</h3>
+        <pre><code class="language-javascript">Players = new Mongo.Collection('Players')
+Bodies = new Mongo.Collection('Bodies')
+// Clients listen for snapshots from the host
+SnapshotStream = new Meteor.Stream('Snapshot')
+// Host listens for inputs from clients
+InputStream = new Meteor.Stream('Input')
+</code></pre>
+      </section>
+      <section>
+        <h2>Client/Host</h2>
+        <h3>The snapshot</h3>
+        <pre><code class="language-javascript">{
+  id: 5,
+  position: [ 432, 120 ],
+  angle: 75,
+  effects: [
+    'jetpack-boost'
+  ]
+}
+</code></pre>
+      </section>
+      <section>
+        <h2>Client/Host</h2>
+        <h3>The update function</h3>
+        <pre><code class="language-javascript">if (isHost) {
+  world.step()
+  emitSnapshot()
+} else {
+  updateView(mostRecentSnapshot)
+}
+render()
+</code></pre>
+      </section>
+      <section>
+        <h2>Client/Host with interpolation</h2>
+        <h3>The slightly more complicated approach</h3>
+        <ul>
+          <li>Lower the send rate from the server</li>
+          <li>Interpolate between snapshots on the client side</li>
+        </ul>
+      </section>
+      <section>
+        <h2>Client/Host with interpolation</h2>
+        <h3>The snapshot</h3>
+        <pre><code class="language-javascript">{
+  id: 5,
+  position: [ 432, 120 ],
+  angle: 75,
+  velocity: [ 4, 9 ],
+  angularVelocity: 20,
+  effects: []
+}
+</code></pre>
+      </section>
+      <section>
+        <h2>Client/Host</h2>
+        <h3>The Problems</h3>
+        <ul>
+          <li>Players have to wait to see the results of their inputs</li>
+          <li>Even with interpolation, dropped packets can mean total standstill</li>
+        </ul>
+      </section>
+      <section data-bespoke-backdrop="emphatic" class="emphatic-text">
+        <h2>Client Side Prediction</h2>
+        <h3>The quite complicated approach</h3>
+        <ul>
+          <li>Clients run their own simulations & predict the results of their inputs</li>
+          <li>The host still simulates the world & maintains authority</li>
+          <li>Where disagreements arise, the host's word is law</li>
+        </ul>
+      </section>
+      <section>
+        <h2>Client Side Prediction</h2>
+        <h3>The Interesting Problem</h3>
+        <ul>
+          <li>On each input, the player reports their current state to the host</li>
+          <li>The host replies with their 'real' state if they're wrong</li>
+          <li>Applying this correction in the simplest manner would effectively send the player <i>back in time</i></li>
+        </ul>
+      </section>
+      <section>
+        <h2>Client Side Prediction</h2><img src="images/prediction-problem.png" class="background-white"><small>Source: http://www.gabrielgambetta.com/fpm2.html</small>
+      </section>
+      <section>
+        <h2>Client Side Prediction</h2>
+        <h3>The Tricky Solution</h3>
+        <ul>
+          <li>Rewind time to when the disagreement occurred</li>
+          <li>Correct the player's state</li>
+          <li>Re-run all inputs since the disagreement in fast-forward</li>
+          <li>Interpolate between player's <i>predicted</i> position and their <i> corrected</i> position</li>
+        </ul>
+      </section>
+      <section>
+        <h2>Client Side Prediction</h2>
+        <h3>Is it possible in Meteor?</h3>
+        <ul>
+          <li>This technique works better if a simulation is deterministic</li>
+          <li>Physics in Javascript is unlikely to be deterministic</li>
+          <li>Client's state will probably need to corrected often, which could be unpleasant</li>
+        </ul>
+      </section>
+      <section>
+        <h2>True Peer-to-peer</h2>
+        <h3>WebRTC and no central host</h3>
+        <ul>
+          <li>Players all run the simulation and inform each other of inputs directly</li>
+          <li>Apart from the initial WebRTC handshakes, no data needs to pass through the server</li>
+          <li>The simulation must be deterministic - there is no authoritative host to correct clients</li>
+          <li>Cheating is much easier (especially with JS being run in the browser)</li>
+        </ul>
+      </section>
+      <section>
+        <h2>Mix & Match</h2>
+        <h3>What I will probably do</h3>
+        <ul>
+          <li>Client/host with interpolation as a baseline</li>
+          <li>Use unreliable WebRTC if supported</li>
+          <li>Upgrade to client-side prediction if the device is powerful enough</li>
+          <li>Reassess clients' hostability scores every so often</li>
+          <li>Explore using WebRTC to communicate some info directly peer-to-peer</li>
+        </ul>
+      </section>
+    </article>
+    <script src="build/build.js"></script>
+  </body>
+</html>
