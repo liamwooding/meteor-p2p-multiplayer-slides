@@ -1,0 +1,209 @@
+doctype html
+html
+  head
+    meta(charset='utf-8')
+    meta(name='viewport', content='width=device-width, initial-scale=1, maximum-scale=1')
+    title Meteor P2P Multiplayer
+
+    link(rel='stylesheet', type='text/css', href='build/build.css')
+
+  style.
+    .bg-wow {
+      background: linear-gradient( rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.5) ), url('images/wow-screenshot-lion.jpg');
+      background-size: 100% 100%;
+    }
+    .bg-chess {
+      background: linear-gradient( rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.5) ), url('images/pure-chess.png');
+      background-size: 100% 100%;
+    }
+    .background-white {
+      background-color: white;
+    }
+
+  body
+
+    article
+
+      section.emphatic-text(data-bespoke-backdrop='emphatic')
+        h1 Peer-to-peer Multiplayer in Meteor
+
+      section
+        h2 Videogames!
+        h3 What does multiplayer mean?
+        ul
+          li Clients can view & interact with a shared simulation
+          li Players may be competing, cooperating, or just messing about
+          li Interactions must be within the rules of the game - circumventing these rules is cheating
+
+      section(data-bespoke-backdrop='bg-wow')
+        h2 Many Worlds
+        ul
+          li Servers can only support so many players at once
+          li Players are usually split between different servers
+          li Players are interacting with an <i>instance</i> of a world
+
+      section
+        h2 Moving Out
+        h3 Taking things off the server
+        ul
+          li Move each instance of the world onto one or more of the client machines
+          li Use a lightweight server to coordinate clients
+
+      section(data-bespoke-backdrop='bg-chess')
+        h2 Deterministic Lockstep
+        h3 The board game approach
+        ul
+          li Game logic must be completely deterministic
+          li On every step, all players advance their simulations and announce their moves
+          li Works great over LAN
+          li Works terribly if any player suffers lag
+      
+      section.emphatic-text(data-bespoke-backdrop='emphatic')
+        h2 Aims & Assumptions
+        ol
+          li We want physics of some kind
+          li Devices will be of variable power
+          li The game should <i>feel</i> low-latency
+          li Players will drop in & out without warning
+
+      section.emphatic-text(data-bespoke-backdrop='emphatic')
+        h2 Aims & Assumptions
+        ol
+          li Not every device supports WebRTC yet
+          li Server-hosted games worked pretty well 10 years ago
+          li Client-hosted games will have roughly twice the latency
+          li The average person's connection is roughly twice as fast as it was 10 years ago
+
+      section
+        h2 Client/Host
+        h3 The simple approach
+        ul
+          li Host runs the simulation
+          li Clients subscribe to snapshots and send inputs to the host
+          li On each screen refresh, client renders the most recent snapshot
+
+      section
+        h2 Client/Host
+        h3 How it works
+        pre
+          code.language-javascript.
+            Players = new Mongo.Collection('Players')
+            Bodies = new Mongo.Collection('Bodies')
+            // Clients listen for snapshots from the host
+            SnapshotStream = new Meteor.Stream('Snapshot')
+            // Host listens for inputs from clients
+            InputStream = new Meteor.Stream('Input')
+
+      section
+        h2 Client/Host
+        h3 The snapshot
+        pre
+          code.language-javascript.
+            {
+              id: 5,
+              position: [ 432, 120 ],
+              angle: 75,
+              effects: [
+                'jetpack-boost'
+              ]
+            }
+
+      section
+        h2 Client/Host
+        h3 The update function
+        pre
+          code.language-javascript.
+            if (isHost) {
+              world.step()
+              emitSnapshot()
+            } else {
+              updateView(mostRecentSnapshot)
+            }
+            render()
+
+      section
+        h2 Client/Host with interpolation
+        h3 The slightly more complicated approach
+        ul
+          li Lower the send rate from the server
+          li Interpolate between snapshots on the client side
+
+      section
+        h2 Client/Host with interpolation
+        h3 The snapshot
+        pre
+          code.language-javascript.
+            {
+              id: 5,
+              position: [ 432, 120 ],
+              angle: 75,
+              velocity: [ 4, 9 ],
+              angularVelocity: 20,
+              effects: []
+            }
+
+      section
+        h2 Client/Host
+        h3 The Problems
+        ul
+          li Players have to wait to see the results of their inputs
+          li Even with interpolation, dropped packets can mean total standstill
+
+      section.emphatic-text(data-bespoke-backdrop='emphatic')
+        h2 Client Side Prediction
+        h3 The quite complicated approach
+        ul
+          li Clients run their own simulations & predict the results of their inputs
+          li The host still simulates the world & maintains authority
+          li Where disagreements arise, the host's word is law
+
+      section
+        h2 Client Side Prediction
+        h3 The Interesting Problem
+        ul
+          li On each input, the player reports their current state to the host
+          li The host replies with their 'real' state if they're wrong
+          li Applying this correction in the simplest manner would effectively send the player <i>back in time</i>
+          
+      section
+        h2 Client Side Prediction
+        img.background-white(src='images/prediction-problem.png')
+        small Source: http://www.gabrielgambetta.com/fpm2.html
+
+      section
+        h2 Client Side Prediction
+        h3 The Tricky Solution
+        ul
+          li Rewind time to when the disagreement occurred
+          li Correct the player's state
+          li Re-run all inputs since the disagreement in fast-forward
+          li Interpolate between player's <i>predicted</i> position and their <i> corrected</i> position
+
+      section
+        h2 Client Side Prediction
+        h3 Is it possible in Meteor?
+        ul
+          li This technique works better if a simulation is deterministic
+          li Physics in Javascript is unlikely to be deterministic
+          li Client's state will probably need to corrected often, which could be unpleasant
+
+      section
+        h2 True Peer-to-peer
+        h3 WebRTC and no central host
+        ul
+          li Players all run the simulation and inform each other of inputs directly
+          li Apart from the initial WebRTC handshakes, no data needs to pass through the server
+          li The simulation must be deterministic - there is no authoritative host to correct clients
+          li Cheating is much easier (especially with JS being run in the browser)
+
+      section
+        h2 Mix & Match
+        h3 What I will probably do
+        ul
+          li Client/host with interpolation as a baseline
+          li Use unreliable WebRTC if supported
+          li Upgrade to client-side prediction if the device is powerful enough
+          li Reassess clients' hostability scores every so often
+          li Explore using WebRTC to communicate some info directly peer-to-peer
+
+    script(src='build/build.js')
